@@ -1,21 +1,25 @@
 import { HTML } from './libs/afrontend/index.js'
 import { GoogleGenAI } from './libs/genai/index.js' // '@google/genai'
-import { ButtonComponent, InputComponent } from './components/index.js'
+import { SelectComponent, ButtonComponent, InputComponent } from './components/index.js'
 
-import { MODEL } from './config.js'
+import { mapArray } from './functions.js'
+
+import { MODELS_LIST } from './config.js'
 
 class SuperPage extends HTML { }
 
 export class Page extends SuperPage {
   ai = null
   el = {
-    gemini_api_key: new InputComponent({ placeholder: 'GEMINI API KEY' }),
+    models: new SelectComponent({ options: mapArray(MODELS_LIST) }),
+    gemini_api_key: new InputComponent({ type: 'password', placeholder: 'GEMINI API KEY' }),
     message: new InputComponent({ placeholder: 'write your message...' }),
     messages: new HTML(),
   }
 
   onCreate() {
     this.append(this.getGeminiApiKeyInput())
+    this.append(this.getModelSelect())
     this.append(this.getCreateAgentButton())
     this.append(this.getMessagesInput())
     this.append(this.getSendMessageButton())
@@ -24,6 +28,10 @@ export class Page extends SuperPage {
 
   getGeminiApiKeyInput() {
     return this.el.gemini_api_key
+  }
+
+  getModelSelect() {
+    return this.el.models
   }
 
   getCreateAgentButton() {
@@ -49,28 +57,37 @@ export class Page extends SuperPage {
   }
 
   onCreateAgentButtonClick() {
-    this.ai = new GoogleGenAI({ apiKey: this.getGeminiApiKey() });
+    this.ai = new GoogleGenAI({
+      apiKey: this.getGeminiApiKey()
+    });
   }
 
   async onSendMessageButtonClick() {
     const question = this.el.message.getValue()
     this.addMessage({ text: question, name: 'user' })
-    const answer = await this.sendMessage({ text: question })
-    this.addMessage({ text: answer, name: 'ai' })
+    const loading = this.addMessage({ text: 'loading', name: 'system' })
+    this.sendMessage({ text: question })
+      .then((answer) => this.addMessage({ text: answer, name: 'ai' }))
+      .catch((err) => this.addMessage({ text: err.message, name: 'ai-error' }))
+      .finally(() => loading.clear())
   }
 
-  addMessage({ text } = {}) {
+  addMessage({ text, name = 'app' } = {}) {
     const message = new HTML()
-    message.setText(text)
+    message.setText(`${name}: ${text}`)
     this.el.messages.append(message)
+    return message
   }
 
   async sendMessage({ text } = {}) {
-    const response = await this.ai.models.generateContent({ model: MODEL, contents: text });
+    const response = await this.ai.models.generateContent({ model: this.getModelName(), contents: text });
     console.log({ response })
     return response.text
   }
 
+  getModelName() {
+    return this.el.models.getValue()
+  }
 
   getGeminiApiKey() {
     return this.el.gemini_api_key.getValue()
